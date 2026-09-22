@@ -1,0 +1,42 @@
+# Phase 8b - THE RUN TO DO.  ~11M params, 220M tokens = Chinchilla-optimal (D = 20N).
+# Measured TPS at the low end of the estimate band (8k tok/s for `micro`) gives
+#   220e6 / 8e3 = 27,500 s ~= 7.6 h worst case, 3.1 h at 20k tok/s.
+# Plan it as an overnight run plugged into power. Expect val perplexity 7-11.
+# Read docs/00_ANALYSIS.md section 5.2 before changing the token budget.
+extends: default.yaml
+
+llm:
+  active: micro
+
+data:
+  dataset: tinystories
+  train_tokens: 220_000_000 # ~47% of the 470M-token corpus - a real partial epoch
+  val_tokens: 2_000_000
+  shard_dir: data/tinystories
+  val_fraction: 0.005
+
+training:
+  dtype: bfloat16
+  seq_len: 512
+  micro_batch_size: 8 # 11M params trains fine at 16; 8 halves thermal load
+  grad_accum_steps: 4
+  tokens_per_step: 16384
+  max_steps: 13428 # ceil(220e6 / 16384)
+  warmup_steps: 300
+  lr: 6.0e-4
+  min_lr: 6.0e-5
+  grad_clip: 1.0
+  eval_interval: 250
+  eval_batches: 20
+  checkpoint_interval: 500
+  keep_last_checkpoints: 3 # 27 checkpoints * 132 MB would eat 3.5 GB
+  log_interval: 10
+  compile: true
+  grad_checkpoint: false # not needed at 11M params (~0.7 GB peak)
+
+run:
+  name: micro-tinystories-220m
+  target_val_loss: 2.30 # ppl ~10
+  target_val_ppl: 11.0
+  stop_early_on_divergence: true # abort if val loss > train loss + 1.5
+  wall_clock_budget_h: 9.0 # hard stop so it cannot silently run for days

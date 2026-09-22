@@ -1,0 +1,45 @@
+# Phase 8c - DOCUMENTED BUT DISCOURAGED.
+# 39M params needs D ~= 20N = 780M tokens to be Chinchilla-optimal. At an estimated
+# 3-8k tok/s on an M1 Air that is 27-72 h of GPU time, i.e. 1-2 weeks of overnight runs,
+# for a quality gain that a properly-trained `micro` mostly captures anyway.
+# Kept in the repo because it is a legal config and Phase 8's job is to *measure* the
+# claim, not assume it: run it only if train_micro's measured TPS comes out above 15k.
+# Full reasoning: docs/00_ANALYSIS.md section 5.2
+extends: default.yaml
+
+llm:
+  active: small
+
+data:
+  dataset: tinystories
+  train_tokens: 780_000_000 # requires 2 full corpus epochs - repetition is fine here
+  val_tokens: 2_000_000
+  shard_dir: data/tinystories
+  val_fraction: 0.005
+
+training:
+  dtype: bfloat16
+  seq_len: 512
+  micro_batch_size: 4 # 39M params: drop the batch to stay well inside the memory budget
+  grad_accum_steps: 8 # keeps tokens_per_step at 16384 for comparability with micro
+  tokens_per_step: 16384
+  max_steps: 47607
+  warmup_steps: 500
+  lr: 4.0e-4
+  min_lr: 4.0e-5
+  grad_clip: 1.0
+  eval_interval: 500
+  eval_batches: 20
+  checkpoint_interval: 1000
+  keep_last_checkpoints: 2
+  log_interval: 20
+  compile: true
+  grad_checkpoint: true # trades ~30% speed for ~40% less activation memory
+
+run:
+  name: small-tinystories-780m
+  target_val_loss: 2.00 # ppl ~7.4
+  target_val_ppl: 8.0
+  stop_early_on_divergence: true
+  wall_clock_budget_h: 80.0
+  thermal_relief: true # fanless: 25 min on / 5 min off, or throttling is worse
