@@ -165,6 +165,7 @@ as evidence; do not merely assert it.
 | Tuned fusion weights for hybrid retrieval | The 0.35 BM25 weight is a defensible default | A labelled relevance set (≥ 200 query/doc pairs) |
 | Continued pretraining on a second corpus (code, or your notes) | Sequential pretraining on 8 GB is slow; measure the payoff first | M3 done and TinyStories quality plateauing |
 | GGUF / `llama.cpp` export of `micro` | Single-framework by design (ADR-1) | A concrete need to run the model outside this repo |
+| CI on a macOS arm runner (ruff, mypy, `test-fast`, `-m parity`) | Gates are hand-run today, and CI has nothing to run before P7 exists | P7 gate green |
 
 ---
 

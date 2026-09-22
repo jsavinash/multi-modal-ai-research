@@ -49,6 +49,20 @@ Every row must be filled. `[est]` markers in earlier docs must be replaced with 
 | **Embedding cache hit rate** | ≥ 95 % | _____ % | `mmar eval --tasks cache_hit` | ⬜ |
 | **Tokenizer compression** | ≥ 3.2 chars/token | _____ | `mmar eval --tasks tokenizer` | ⬜ |
 | **MemoryGuard enforcement** | Never exceeds budget | _____ | `mmar eval --tasks memory_pressure` | ⬜ |
+| **Ingest throughput (text)** | ≥ 50 files/s | _____ /s | `mmar eval --tasks ingest_throughput` | ⬜ |
+| **PDF text page** | ≤ 120 ms/page | _____ ms | `mmar eval --tasks pdf_latency` | ⬜ |
+| **PDF OCR page** | ≤ 900 ms/page | _____ ms | `mmar eval --tasks pdf_latency` | ⬜ |
+| **Image OCR + embed** | ≤ 1.2 s/image | _____ s | `mmar eval --tasks image_latency` | ⬜ |
+| **Audio ingest (1 h)** | ≤ 6 min | _____ min | `mmar eval --tasks audio_latency` | ⬜ |
+| **Retrieval p95** | ≤ 60 ms | _____ ms | `mmar eval --tasks retrieval_latency` | ⬜ |
+| **Chat TTFT (`micro`)** | ≤ 400 ms | _____ ms | `mmar eval --tasks ttft` | ⬜ |
+| **Chat decode (`micro`)** | ≥ 60 tok/s | _____ tok/s | `mmar eval --tasks decode_tps` | ⬜ |
+| **Chat decode (instruct)** | ≥ 20 tok/s | _____ tok/s | `mmar eval --tasks decode_tps` | ⬜ |
+| **Vision caption** | ≤ 6 s/image | _____ s | `mmar eval --tasks caption_latency` | ⬜ |
+| **Peak RSS — pretrain** | < 1.2 GB | _____ GB | `mmar eval --tasks train_rss` | ⬜ |
+| **Idle server RSS** | < 250 MB | _____ MB | `mmar eval --tasks idle_rss` (5 min idle) | ⬜ |
+| **Cold start → first token** | ≤ 5 s | _____ s | `mmar eval --tasks cold_start` | ⬜ |
+| **Peak RSS — any request** | < 2.5 GB | _____ GB | `mmar eval --tasks request_rss` | ⬜ |
 
 ## Evaluation harness
 
@@ -56,7 +70,7 @@ Every row must be filled. `[est]` markers in earlier docs must be replaced with 
 # src/mmar/eval/harness.py
 class EvalHarness:
     def __init__(self, settings: Settings, store: MediaStore) -> None: ...
-    def run(self, tasks: Sequence[str], *, checkpoint: Path | None = None) -> EvalReport: ...
+    def run(self, tasks: Sequence[str], *, checkpoint: Path | None = None) -> list[TaskReport]: ...
     def task_ppl(self, checkpoint: Path) -> float: ...
     def task_sft(self, checkpoint: Path) -> float: ...
     def task_caption(self, checkpoint: Path) -> float: ...
@@ -67,14 +81,26 @@ class EvalHarness:
     def task_cache_hit(self) -> float: ...
     def task_tokenizer(self) -> float: ...
     def task_memory_pressure(self) -> dict[str, float]: ...
+    def task_ingest_throughput(self) -> float: ...
+    def task_pdf_latency(self) -> float: ...
+    def task_image_latency(self) -> float: ...
+    def task_audio_latency(self) -> float: ...
+    def task_retrieval_latency(self) -> float: ...
+    def task_ttft(self, checkpoint: Path) -> float: ...
+    def task_decode_tps(self, checkpoint: Path) -> float: ...
+    def task_caption_latency(self, checkpoint: Path) -> float: ...
+    def task_train_rss(self) -> float: ...
+    def task_idle_rss(self) -> float: ...
+    def task_cold_start(self) -> float: ...
+    def task_request_rss(self) -> float: ...
 
 @dataclass(slots=True, frozen=True)
-class EvalReport:
+class TaskReport:                 # one per task; distinct from docs/02 section 9 EvalReport
     task: str; value: float; target: float | None; unit: str
     passed: bool; command: str; raw_output: str
 ```
 
-**Contract:** `EvalReport` carries the command and the raw output. `docs/12_RESULTS.md` is generated from a sequence of `EvalReport` objects, not written by hand. This is how the document stays honest.
+**Contract:** `TaskReport` (one per task, this file) carries the command and the raw output; the aggregate `EvalReport` (docs/02 §9) is built from a sequence of `TaskReport` objects. `docs/12_RESULTS.md` is generated from them, not written by hand. This is how the document stays honest.
 
 ## What to do when a target is missed
 
@@ -97,7 +123,7 @@ class EvalReport:
 
 ## Tasks
 
-1. `src/mmar/eval/harness.py` with all task methods above. Each task writes its raw command output into `EvalReport.raw_output`.
+1. `src/mmar/eval/harness.py` with all task methods above. Each task writes its raw command output into `TaskReport.raw_output`.
 2. `src/mmar/eval/metrics.py`: `compute_wer`, `compute_rouge_l`, `compute_exact_match`, `compute_recall@k`, `compute_cache_hit_rate`.
 3. `tests/test_eval.py`: each metric tested against hand-computed values; the harness tested with a fake store.
 4. Run every task in the SLO table. For each, paste the raw command output into `docs/12_RESULTS.md`.
@@ -109,8 +135,7 @@ class EvalReport:
 
 ```bash
 make test-fast
-make eval --out artifacts/eval/report.json
-python -m mmar.cli eval --print-report
+python -m mmar.cli eval --out artifacts/eval/report.json   # writes report.json + summary box
 pytest tests/test_architecture.py -v
 ```
 
@@ -118,7 +143,7 @@ pytest tests/test_architecture.py -v
 
 ## Definition of Done
 
-- [ ] `docs/12_RESULTS.md` has 20 rows, all "Measured" cells filled, all misses explained
+- [ ] `docs/12_RESULTS.md` has 33 rows, all "Measured" cells filled, all misses explained
 - [ ] `artifacts/eval/report.json` exists and is valid JSON with the same data
 - [ ] `tests/test_architecture.py` green — the layer rule holds end to end
 - [ ] README's claims section matches the measured values
@@ -161,7 +186,7 @@ DELIVERABLES - exactly these paths
   docs/12_RESULTS.md
 
 KEY REQUIREMENTS
-  - EvalHarness.run(tasks) returns a list of EvalReport, one per task. Each EvalReport
+  - EvalHarness.run(tasks) returns a list of TaskReport, one per task. Each TaskReport
     carries: task name, measured value, target, unit, passed boolean, command string,
     raw_output string.
   - Metrics: compute_wer (jiwer), compute_rouge_l (rouge-score), compute_exact_match,
@@ -171,7 +196,8 @@ KEY REQUIREMENTS
   - task_sft: run eval_sft.py on the holdout set; return exact-match and ROUGE-L.
   - task_memory_pressure: run peak_tracker around a representative sequence (import,
     ingest, chat) and return {phase: peak_mb} dict.
-  - docs/12_RESULTS.md: a Markdown table with all 20 SLO rows. Each row has: SLO name,
+  - docs/12_RESULTS.md: a Markdown table with all 33 SLO rows (the union of analysis section 15
+    and this file's table). Each row has: SLO name,
     target, measured value, unit, pass/fail, command, raw output (inlined or linked).
     Misses have an "Explanation" paragraph below the table.
   - artifacts/eval/report.json: the same data as the Markdown table, as JSON.
@@ -184,7 +210,7 @@ FORBIDDEN
 
 TASKS
   1. src/mmar/eval/metrics.py with all metric functions and hand-computed unit tests.
-  2. src/mmar/eval/harness.py with all task methods and EvalReport dataclass.
+  2. src/mmar/eval/harness.py with all task methods and the TaskReport dataclass.
   3. tests/test_eval.py covering every metric and the harness with a fake store.
   4. Run every task in the SLO table. For each, capture raw output and write the row.
   5. For every miss, write the explanation paragraph.
@@ -194,8 +220,7 @@ TASKS
 
 EXIT GATE - paste the complete unedited output
   make test-fast
-  make eval --out artifacts/eval/report.json
-  python -m mmar.cli eval --print-report
+  python -m mmar.cli eval --out artifacts/eval/report.json  # writes report.json + summary box
   pytest tests/test_architecture.py -v
   git diff --stat
 

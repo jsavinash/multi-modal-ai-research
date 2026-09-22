@@ -197,7 +197,7 @@ constraint (§5).
 |---|---|---|---|
 | A. Text/doc ingest | parsers + Apple Vision OCR (OS-managed) | ~0.3 GB | ✅ 4.3 GB |
 | B. Image ingest | + SigLIP/CLIP embedder (0.2 GB) | ~0.6 GB | ✅ 4.0 GB |
-| C. Audio ingest | + Moonshine-base ASR (0.5 GB) | ~0.9 GB | ✅ 3.7 GB |
+| C. Audio ingest | + `whisper-base` ASR (~0.2 GB) | ~0.6 GB | ✅ 4.0 GB |
 | D. VLM captioning | + SmolVLM-256M 4-bit (~0.7 GB) | ~1.4 GB | ✅ 3.2 GB |
 | E. RAG chat (Track D) | + Qwen3-0.6B 4-bit (~0.5 GB) | ~1.1 GB | ✅ 3.5 GB |
 | F. Pretrain `micro` | our LM only | ~0.7 GB | ✅ 3.9 GB |
@@ -485,8 +485,9 @@ deliberately, for a folder of images where free-form description matters.
 
 | Job | Chosen | Size | Peak RSS | Why |
 |---|---|---|---|---|
-| ASR (default) | `mlx-community/whisper-large-v3-turbo` | ~0.8 B | ~1.0–1.6 GB | Best accuracy/size trade on Apple Silicon, 99 languages, pure-MLX so it runs on the GPU |
-| ASR (fast pass) | `whisper-tiny` / `whisper-base` | 39 M / 74 M | ~0.2 GB | For triage over long archives; re-run selectively with turbo |
+| ASR (default, pass 1) | `whisper-base` | 74 M | ~0.2 GB | `ingest.audio.backend` default (P3): fast first pass over any archive |
+| ASR (upgrade, pass 2) | `mlx-community/whisper-large-v3-turbo` | ~0.8 B | ~1.0–1.6 GB | Accuracy pass via `mmar transcribe --upgrade`; best accuracy/size trade on Apple Silicon, 99 languages, pure-MLX |
+| ASR (bulk triage) | `whisper-tiny` | 39 M | ~0.1 GB | Pre-screening very large archives only |
 | ASR (alt, English) | Moonshine-base via CPU ONNX | 61 M | ~0.3 GB | 6× smaller than Whisper-large-v3, **much lower hallucination risk**; streaming-friendly |
 | ASR (alt, best English) | Parakeet-TDT-0.6b-v3 | 0.6 B | ~0.7 GB | Strongest English accuracy per benchmark; NeMo path is heavier to install |
 | ❌ Rejected | `faster-whisper` large-v3 | 1.5 B | ~2 GB+ int8, CPU-only | CTranslate2 has no Apple GPU path — it burns the CPU while the GPU idles |
@@ -786,7 +787,7 @@ SmolVLM-256M, which is one config line away.
 | Dataset | Tokens | Licence | Verdict |
 |---|---|---|---|
 | **TinyStories v2** | ~470 M | CDLA-Sharing-1.0 | ✅ **Chosen.** Purpose-built to show tiny models can produce coherent English; short stories fully exercise the 512-token context; 470 M tokens is ~2× the Chinchilla budget for `micro` |
-| WikiText-103 | 103 M | CC BY-SA | ❌ Kept as the **negative control** in Phase 8, to *demonstrate* enclyclopedic text is a poor fit at 11 M params |
+| WikiText-103 | 103 M | CC BY-SA | ❌ Kept as the **negative control** in Phase 8, to *demonstrate* encyclopedic text is a poor fit at 11 M params |
 | FineWeb-Edu sample | 10 B+ | ODC-By | ⚠️ Legal and high quality, but web-diverse text needs ~10× the parameters. Documented as out of scope |
 | Your own documents | unlimited | yours | ✅ Excellent for the **SFT** stage (§9.5) |
 
@@ -971,7 +972,9 @@ Ordering rules the registry enforces, derived from §4.5:
 ## 15. Performance envelope / SLOs
 
 These are the numbers Phase 12 certifies. "Certified" means measured on this machine, written into
-`docs/12_RESULTS.md` together with the command that produced it.
+`docs/12_RESULTS.md` together with the command that produced it. **The canonical SLO list is the
+union of this table and the quality/memory table in [P12](phases/P12_evaluation.md) — 33 rows; the
+certification is incomplete until every row of both is filled.**
 
 | Path | Metric | Target | Stretch | Notes |
 |---|---|---|---|---|

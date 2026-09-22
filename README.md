@@ -25,8 +25,8 @@ whose tokenizer, attention, training loop and KV cache are written from scratch*
 ## What this project actually is (read this before the hype)
 
 There are two different things people mean by "build a multimodal LLM from scratch". This
-project does **both**, in two clearly separated tracks, because conflating them is how these
-projects die.
+project does **both**, in four clearly separated tracks (A–D), because conflating them is how
+these projects die.
 
 ### Track A — `mmar.llm`: a genuinely from-scratch transformer (text → text)
 
@@ -153,12 +153,12 @@ mmar/
 
 | Track | Calendar time (evenings) | Compute time |
 |---|---|---|
-| Phase 0–4 (ingest → RAG, useful assistant) | ~4–6 evenings | ~0 |
-| Phase 5–7 (tokenizer → from-scratch transformer, verified) | ~3–4 evenings | minutes |
-| Phase 8–9 (pretrain + instruction-tune) | ~2–3 evenings | **~6–10 h** (unattended) |
-| Phase 10–12 (multimodal bridge, serving, eval) | ~4–6 evenings | ~3–6 h |
+| Phase 0–4 (ingest → RAG, useful assistant) | ~7–8 evenings | ~0 |
+| Phase 5–7 (tokenizer → from-scratch transformer, verified) | ~4 evenings | minutes |
+| Phase 8–9 (pretrain + instruction-tune) | ~2 evenings | **~5–10 h** (unattended) |
+| Phase 10–12 (multimodal bridge, serving, eval) | ~5 evenings | ~2.5–3 h |
 
-**Total: ~3–4 weeks of evenings, ~10–16 h of GPU time.** Every phase has an exit gate; no phase
+**Total: ~18–22 evenings (~4 weeks), ~7–13 h of GPU time.** Every phase has an exit gate; no phase
 requires more than one sitting of thinking.
 
 ## Licence

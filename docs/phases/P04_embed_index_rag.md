@@ -52,7 +52,7 @@ Non-negotiable behaviours:
   is ~2 ms at 100 % recall (ADR-7).
 - A cross-encoder reranker by default. `HeuristicReranker` is the default; the cross-encoder is opt-in
   because it costs 0.3 GB and ~40 ms per query.
-- Genering an answer without citations. Every response path must carry `Citation` objects.
+- Generating an answer without citations. Every response path must carry `Citation` objects.
 - `print()` anywhere in `mmar/rag` or `mmar/serve`.
 - Claiming the assistant "works" without the 10-question evaluation in the gate.
 

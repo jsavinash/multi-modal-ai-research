@@ -33,7 +33,7 @@ Full signatures: [`docs/02 §7`](../02_FUNCTION_REQUIREMENTS.md#7-l4--the-multim
 Non-negotiable behaviours:
 
 - **`Projector` is a 2-layer MLP + GELU: d_in → 4·d_model → d_model.** Nothing else is trainable in stage 1. A more complex projector is not free at 11 M params and the literature does not support it.
-- **`PatchPooler` is parameter-free 2×2 spatial merge:** 196 patch embeddings → 49 tokens by reshaping to (14, 14, d_v) → (7, 7, 4·d_v) → (49, d_v). Config-selectable pool_factor in {1, 2, 4}.
+- **`PatchPooler` is parameter-free 2×2 spatial merge:** 196 patch embeddings → 49 tokens by reshaping to (14, 14, d_v) → (7, 7, 4·d_v) → (49, d_v). Config-selectable `pool_factor` is the **token-count divisor**: 1 → 196, 2 → 98, 4 → 49 tokens; default **4** (this 2×2 merge, analysis §10.3).
 - **Frozen encoders are always eval mode and always `no_grad`.** They are never moved to the GPU by the bridge code; the registry owns residency and enforces `max_concurrent_models: 1`.
 - **Stage 1 freezes the LLM.** Training both projector and LM from the start lets the LM unlearn English while the projector is still random — gradients from garbage image tokens are pure noise. This is the single most important detail of the LLaVA recipe.
 - **Audio token budget is enforced:** Whisper encoder produces ~1500 frames; subsample 6× → 250 frames; mean-pool 5× → 50 tokens. `meta["audio_tokens"]` must be recorded.
@@ -213,9 +213,14 @@ DELIVERABLES - exactly these paths
 
 KEY REQUIREMENTS
   - Projector: mx.nn.Module, 2 linear layers + GELU, d_in -> 4*d_model -> d_model.
-    d_in = 768 for CLIP ViT-B/32 / SigLIP-base, 512 for Whisper encoder output after pooling.
-  - PatchPooler: reshape (B, 196, d_v) -> (B, 14, 14, d_v) -> (B, 7, 7, 4*d_v) -> (B, 49, d_v).
-    pool_factor in {1, 2, 4}; default 4.
+    Projector 1 (images): d_in = 768 (CLIP ViT-B/32 / SigLIP-base patch width).
+    Projector 2 (audio): d_in = encoder.d_out of the CONFIGURED ASR backend - 768 for
+    whisper-base, 1280 for large-v3-turbo. Assert d_in == encoder.d_out at construction;
+    a mismatch must raise immediately, never surface as a matmul error mid-training.
+  - PatchPooler: pool_factor is the token-count divisor {1, 2, 4}; default 4.
+    At 4: reshape (B, 196, d_v) -> (B, 14, 14, d_v) -> (B, 7, 7, 4*d_v) -> (B, 49, d_v).
+    At 1: identity (196 tokens); at 2: merge pairs -> 98 tokens. All three divide a 14x14
+    grid evenly - never pad, never drop edge patches.
   - Frozen encoders: acquire() through ModelRegistry; encode() under no_grad; eval mode.
     The registry enforces max_concurrent_models: 1.
   - ModalityBatch: input_ids (B, T) with placeholder tokens at image/audio positions;

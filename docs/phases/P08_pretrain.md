@@ -75,7 +75,7 @@ smaller one trained properly* (analysis §5.2). This is the single most importan
 python scripts/prepare_tinystories.py --tokens 220000000
 make train-smoke
 make train-micro                     # overnight
-python -m mmar.cli chat --config configs/train_micro.yaml
+python -m mmar.cli chat --engine scratch      # generate from the final checkpoint; paste 10 samples
 ```
 
 ## Definition of Done
@@ -171,7 +171,7 @@ EXIT GATE - paste the complete unedited output
   python scripts/prepare_tinystories.py --tokens 220000000
   make train-smoke
   make train-micro                            # overnight
-  python -m mmar.cli chat --config configs/train_micro.yaml
+  python -m mmar.cli chat --engine scratch    # generate from final checkpoint; paste 10 samples
   # and: kill + resume check on the smoke run
 
 EVIDENCE REQUIRED IN YOUR RESPONSE

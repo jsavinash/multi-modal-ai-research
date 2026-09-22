@@ -350,6 +350,9 @@ class IngestionPipeline:
 
 ### 3.1 `mmar/rag/chunker.py`
 
+> **Ownership:** `RecursiveChunker`, `FixedTokenChunker`, `CodeChunker`, `TabularChunker` and
+> `SemanticChunker` land in **P1** (with `test_chunker.py`); `TemporalChunker` is added in **P3**.
+
 ```python
 class Chunker(Protocol):
     name: str
@@ -969,7 +972,50 @@ def extract_citation_markers(text: str) -> list[int]:
 
 ---
 
-## 7. L4 — The multimodal bridge (`mmar/llm/bridge/`)
+### 6.11 SFT (`mmar/llm/sft.py`, `sft_data.py`, `eval_sft.py`)
+
+```python
+# mmar/llm/sft_data.py
+@dataclass(slots=True, frozen=True)
+class SFTPair:
+    prompt: str; response: str; template_id: str; source_chunk_id: str | None
+
+class SFTDatasetBuilder:
+    """Build prompt/response pairs from the ingested store + a seed template set.
+    Deterministic: same store + same settings -> byte-identical dataset.jsonl."""
+    def __init__(self, settings: Settings, store: MediaStore, tokenizer: Tokenizer) -> None: ...
+    def build(self, *, n_pairs: int, holdout_path: Path, n_holdout: int = 200) -> Path:
+        """Writes the 200-prompt holdout FIRST (it must never leak into the train split),
+        then artifacts/sft/dataset.jsonl. Returns the train-set path."""
+
+# mmar/llm/sft.py
+@dataclass(slots=True)
+class SFTReport:
+    steps_completed: int; train_loss: float; val_loss: float
+    holdout_exact_match: float; holdout_rouge_l: float
+    base_val_ppl: float; sft_val_ppl: float; forgetting_ratio: float
+    tokens_per_second: float; peak_rss_mb: float; wall_clock_s: float
+    def render(self) -> str: ...
+
+class SFTTrainer:
+    """Reuses llm.train.Trainer. The ONLY deltas: assistant-only loss mask and the
+    text-mixing fraction. Everything else (grad clip + pre-clip norm logging,
+    cosine schedule, divergence guard, bit-exact resume) comes from P7."""
+    def __init__(self, settings: Settings, *, base_checkpoint: Path, dataset: Path,
+                 holdout: Path, resume: Literal["auto", "never"] | Path = "never") -> None: ...
+    def train(self) -> SFTReport: ...
+
+# mmar/llm/eval_sft.py
+def eval_sft(checkpoint: Path, holdout: Path, *, settings: Settings | None = None) -> dict[str, float]:
+    """Returns {'exact_match': ..., 'rouge_l': ..., 'val_ppl': ..., 'forgetting_ratio': ...}.
+    forgetting_ratio = sft_val_ppl / base_val_ppl; gate at 1.3 (risk R12)."""
+```
+
+**Invariants:** `loss_mask[i] == 1` only on assistant tokens (asserted by `test_sft_mask.py`);
+holdout pairs are disjoint from train pairs by `template_id` **and** `source_chunk_id`;
+20 % of every batch is raw pretraining text; `forgetting_ratio <= 1.3` or the phase fails.
+
+
 
 ```python
 # mmar/llm/bridge/projector.py
@@ -980,8 +1026,9 @@ class Projector(mx.nn.Module):
 
 class PatchPooler(mx.nn.Module):
     """196 patch tokens -> 49 by 2x2 spatial merge (pixel-shuffle). Parameter-free.
-    Config-selectable: pool_factor in {1, 2, 4}. See analysis 10.3 for the token budget."""
-    def __init__(self, pool_factor: int = 2, grid_hw: tuple[int, int] = (14, 14)) -> None: ...
+    pool_factor is the TOKEN-COUNT divisor: 1 -> 196, 2 -> 98, 4 -> 49 tokens
+    (on a 14x14 grid, 4 = 2x2 merge -> (7, 7)). Default 4 = analysis 10.3 default."""
+    def __init__(self, pool_factor: int = 4, grid_hw: tuple[int, int] = (14, 14)) -> None: ...
     def __call__(self, patches: mx.array) -> mx.array: ...
 
 # mmar/llm/bridge/encoders.py
@@ -1124,7 +1171,7 @@ Requirements:
 - **Every response carries `timings` and `memory`** so the UI shows real numbers and a performance
   regression is visible in normal use rather than in a benchmark.
 
-### 8.3 `mmar/serve/ui/`
+### 8.3 `mmar/serve/web/`
 
 A single static HTML page (no build step, no node): chat pane, drag-drop zone, provenance panel with
 citations and page/timestamp deep links, and a live memory bar fed by `/v1/memory`. Deliberately a

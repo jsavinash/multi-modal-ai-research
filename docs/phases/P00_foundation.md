@@ -14,6 +14,9 @@
 ## Deliverables (exact paths)
 
 ```
+pyproject.toml  Makefile  .python-version  .gitignore  LICENSE
+src/mmar/__init__.py
+configs/{default,train_smoke,train_micro,train_small}.yaml
 src/mmar/errors.py
 src/mmar/config.py
 src/mmar/cli.py
@@ -48,15 +51,37 @@ The non-negotiable behaviours:
 - New dependencies beyond what `pyproject.toml` already declares.
 - Writing to `data/`, `artifacts/` or `checkpoints/` except to create the directories.
 
+## Dependency manifest (create `pyproject.toml` with exactly these)
+
+| Group | Packages |
+|---|---|
+| core | `numpy`, `pydantic`, `pydantic-settings`, `pyyaml`, `typer`, `rich` |
+| ingest | `trafilatura`, `pypdfium2`, `openpyxl`, `python-docx`, `python-pptx`, `ebooklib` |
+| vision | `ocrmac`, `pyobjc-framework-Vision` |
+| models | `mlx`, `mlx-lm`, `mlx-embeddings`, `mlx-whisper`, `mlx-vlm` |
+| eval | `jiwer`, `rouge-score` |
+| serve | `fastapi`, `uvicorn`, `sse-starlette`, `python-multipart`, `jinja2` |
+| `[dev]` extra | `pytest`, `ruff`, `mypy`, `httpx` |
+
+No phase after P0 may add a dependency without editing this table **and** `pyproject.toml` in the
+same commit (R7: pin `mlx*` packages to minor versions). pytest markers registered: `parity`,
+`slow`, `heavy` (docs/02 §10 marker policy).
+
 ## Tasks
 
-1. `uv venv --python 3.11 .venv && uv pip install -e ".[dev]"`. Record the resolved `mlx` version.
-2. Ensure `ffmpeg` (`brew install ffmpeg` if absent); record `ffmpeg -version | head -1`.
-3. Implement `errors.py`, then `utils/io.py`, `utils/log.py`, `utils/sniff.py`, `utils/memory.py`.
-4. Implement `config.py` with the full validation list from docs/02 §1.1.
-5. Implement `cli.py` with **only** `info` and `doctor`.
-6. Write the four test files.
-7. Run the gate, then write `docs/12_RESULTS.md` with the P0 measurements.
+1. Create the bootstrap files first — `LICENSE` (MIT) and `.gitignore` already exist; **create
+   the rest**: `pyproject.toml` (the manifest above + pytest markers `parity`/`slow`/`heavy` +
+   ruff and mypy config), `Makefile` (GNU make, tab-indented; every target any phase gate calls:
+   `doctor info test-fast test-parity memory data-tinystories tokenize ingest index chat serve
+   eval bench train-smoke train-micro train-sft`), `.python-version` (`3.11`),
+   `src/mmar/__init__.py`, and the four `configs/*.yaml` wired with the `extends:` chain.
+2. `uv venv --python 3.11 .venv && uv pip install -e ".[dev]"`. Record the resolved `mlx` version.
+3. Ensure `ffmpeg` (`brew install ffmpeg` if absent); record `ffmpeg -version | head -1`.
+4. Implement `errors.py`, then `utils/io.py`, `utils/log.py`, `utils/sniff.py`, `utils/memory.py`.
+5. Implement `config.py` with the full validation list from docs/02 §1.1.
+6. Implement `cli.py` with **only** `info` and `doctor`.
+7. Write the four test files.
+8. Run the gate, then write `docs/12_RESULTS.md` with the P0 measurements.
 
 ## Exit gate
 
@@ -89,9 +114,9 @@ CONTEXT - read these before writing anything
   1. docs/00_ANALYSIS.md  sections 3.3, 4, 6.1, 12.3
   2. docs/02_FUNCTION_REQUIREMENTS.md  sections 0, 0.1, 1.1-1.5
   3. docs/01_ROADMAP.md  section 5 (Definition of Done)
-  4. Existing repo files: pyproject.toml, Makefile, .python-version, configs/default.yaml,
-     configs/train_micro.yaml, configs/train_smoke.yaml, configs/train_small.yaml,
-     src/mmar/__init__.py, .gitignore
+  4. Bootstrap files: LICENSE and .gitignore already exist; you CREATE the rest in task 1 -
+     pyproject.toml, Makefile, .python-version, src/mmar/__init__.py, configs/default.yaml,
+     configs/train_micro.yaml, configs/train_smoke.yaml, configs/train_small.yaml
 
 MACHINE
   MacBook Air M1, 8 GB unified memory, fanless, macOS 26.x. python3.11 via uv.
@@ -101,11 +126,22 @@ MACHINE
 HARD CONSTRAINTS
   - Peak RSS of `import mmar` plus `import mmar.config` must be UNDER 250 MB. Measure it
     with /usr/bin/time -l. Do not estimate.
-  - No new dependency. Everything needed is already declared in pyproject.toml.
+  - pyproject.toml is created in task 1 with EXACTLY the DEPENDENCIES block below. After
+    task 1 no phase may add a package - the manifest is closed.
   - Do not create placeholder packages for phases 1-12. P0 is foundation only.
   - Do not import mlx anywhere reachable from `import mmar` or `import mmar.cli`.
 
 DELIVERABLES - exactly these paths
+  pyproject.toml
+  Makefile
+  .python-version
+  .gitignore
+  LICENSE
+  src/mmar/__init__.py
+  configs/default.yaml
+  configs/train_smoke.yaml
+  configs/train_micro.yaml
+  configs/train_small.yaml
   src/mmar/errors.py
   src/mmar/config.py
   src/mmar/cli.py
@@ -139,6 +175,17 @@ KEY REQUIREMENTS
     rule from docs/00_ANALYSIS.md section 6.1. It will have little to check now; write it
     now so every later phase is covered automatically.
 
+DEPENDENCIES - pyproject.toml declares exactly this manifest, no other package anywhere
+  core:    numpy pydantic pydantic-settings pyyaml typer rich
+  ingest:  trafilatura pypdfium2 openpyxl python-docx python-pptx ebooklib
+  vision:  ocrmac pyobjc-framework-Vision
+  models:  mlx mlx-lm mlx-embeddings mlx-whisper mlx-vlm
+  eval:    jiwer rouge-score
+  serve:   fastapi uvicorn sse-starlette python-multipart jinja2
+  [dev]:   pytest ruff mypy httpx
+  Also in pyproject: pytest markers parity, slow, heavy (docs/02 section 10);
+  ruff + mypy config; pin mlx* packages to minor versions (risk R7).
+
 FORBIDDEN
   - Raising runtime.max_process_rss_mb in configs/default.yaml to make something fit.
   - `except Exception: pass`. Every except must re-raise as an MmarError subclass or log at
@@ -147,15 +194,21 @@ FORBIDDEN
   - Reporting a command as passing without pasting its raw output.
 
 TASKS
-  1. uv venv --python 3.11 .venv ; uv pip install -e ".[dev]"
+  1. Create the bootstrap files (LICENSE and .gitignore already exist - keep them):
+     pyproject.toml with the DEPENDENCIES block above + pytest markers parity/slow/heavy +
+     ruff + mypy config; Makefile (tab-indented) with targets: doctor info test-fast
+     test-parity memory data-tinystories tokenize ingest index chat serve eval bench
+     train-smoke train-micro train-sft; .python-version ("3.11"); src/mmar/__init__.py;
+     configs/default.yaml + train_smoke + train_micro + train_small wired with extends:.
+  2. uv venv --python 3.11 .venv ; uv pip install -e ".[dev]"
      Record: python version, mlx version, and pip freeze | grep -E "mlx|numpy|pydantic".
-  2. Ensure ffmpeg (brew install ffmpeg if absent). Record ffmpeg -version | head -1.
-  3. Implement errors.py with the 8-class hierarchy from docs/02 section 0.1.
-  4. Implement utils/io.py, utils/log.py, utils/sniff.py, utils/memory.py.
-  5. Implement config.py with the full validation list.
-  6. Implement cli.py with only `info` and `doctor`.
-  7. Write the four test files.
-  8. Run the exit gate, then write docs/12_RESULTS.md with the measurements.
+  3. Ensure ffmpeg (brew install ffmpeg if absent). Record ffmpeg -version | head -1.
+  4. Implement errors.py with the 8-class hierarchy from docs/02 section 0.1.
+  5. Implement utils/io.py, utils/log.py, utils/sniff.py, utils/memory.py.
+  6. Implement config.py with the full validation list.
+  7. Implement cli.py with only `info` and `doctor`.
+  8. Write the four test files.
+  9. Run the exit gate, then write docs/12_RESULTS.md with the measurements.
 
 EXIT GATE - run these and paste the complete unedited output
   make doctor

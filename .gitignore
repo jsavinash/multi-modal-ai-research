@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated data — P0 forbids committing these
+data/
+artifacts/
+checkpoints/
+models/
+
+# Model weights / token shards
+*.safetensors
+*.npz
+
+# OS / editor
+.DS_Store
+.vscode/

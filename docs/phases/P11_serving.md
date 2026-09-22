@@ -14,7 +14,8 @@
 ## Deliverables
 
 ```
-src/mmar/serve/__init__.py  app.py  schemas.py  orchestrator.py
+src/mmar/serve/__init__.py  app.py  schemas.py  api.py
+src/mmar/serve/orchestrator.py           # EXISTS from P4 - call it, never rewrite it
 src/mmar/serve/web/__init__.py  index.html  static/
 tests/test_serve.py  test_api.py  test_sse.py
 ```
@@ -92,7 +93,7 @@ class ChatResponse(BaseModel):
 ## Tasks
 
 1. `serve/schemas.py`: all request/response models above, plus `MemorySnapshot` schema.
-2. `serve/orchestrator.py` (API glue, distinct from `mmar/serve/orchestrator.py` in P4): one function per endpoint that translates HTTP inputs to pipeline calls and back. No business logic here.
+2. `serve/api.py` (endpoint glue): one function per endpoint that translates HTTP inputs into calls on the **existing** `mmar/serve/orchestrator.py` (P4) and back. No business logic here — and do not move or rewrite P4's module.
 3. `serve/app.py`: FastAPI app, middleware for memory telemetry, error handlers that convert `MmarError` to JSON API errors with actionable hints.
 4. SSE implementation for `/v1/chat/stream`: `token`, `citations`, `done` events. `test_sse.py` asserts event order and content.
 5. `/v1/ingest/async` with a job store in sqlite (`jobs` table, already in `MediaStore`). A disconnected client can poll `/v1/jobs/{job_id}`.
@@ -165,7 +166,7 @@ DELIVERABLES - exactly these paths
   src/mmar/serve/__init__.py
   src/mmar/serve/app.py
   src/mmar/serve/schemas.py
-  src/mmar/serve/orchestrator.py
+  src/mmar/serve/api.py
   src/mmar/serve/web/__init__.py
   src/mmar/serve/web/index.html
   src/mmar/serve/web/static/app.js
@@ -178,8 +179,9 @@ KEY REQUIREMENTS
   - schemas.py: ChatRequest, ChatResponse, Citation, MemorySnapshot, Transcript, and all
     endpoint request/response models. Use pydantic BaseModel; no dataclasses here because
     FastAPI needs pydantic for OpenAPI.
-  - orchestrator.py (serve): one function per endpoint. It translates HTTP inputs to calls
-    on the P4 orchestrator and returns. No business logic, no chunking, no embedding here.
+  - api.py: one function per endpoint. It translates HTTP inputs to calls on the EXISTING
+    P4 orchestrator (src/mmar/serve/orchestrator.py) and returns. No business logic, no
+    chunking, no embedding here, and no rewrite of the P4 module.
   - app.py: FastAPI with CORS, exception handlers converting MmarError to JSON with
     {"error": {"code": "...", "hint": "..."}}, middleware recording per-request RSS delta.
   - SSE: /v1/chat/stream uses sse-starlette. Events are: {"type": "token", "text": "..."},
@@ -202,7 +204,7 @@ FORBIDDEN
 
 TASKS
   1. schemas.py - all request/response models.
-  2. serve/orchestrator.py - endpoint glue functions.
+  2. serve/api.py - endpoint glue functions (call, do not modify, the P4 orchestrator).
   3. app.py - FastAPI app, middleware, exception handlers, SSE.
   4. test_serve.py + test_api.py + test_sse.py.
   5. Web UI (index.html + app.js + style.css).
